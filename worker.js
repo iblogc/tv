@@ -320,18 +320,18 @@ async function handleRequest(request) {
             // 1. 初始匹配：提取所有可能的 m3u8 链接
             const rawMatches = content.match(/https?:\/\/[^"'\s\(\)\[\]]+?\.m3u8/g) || [];
             
-            // 2. 二次清洗：处理嵌套在跳转链接（如 ?url=...）中的真实地址
-            const cleanMatches = rawMatches.map(link => {
-                // 如果包含 url=，则取其后的部分
-                if (link.includes('url=')) {
-                    return link.split('url=')[1];
-                }
-                return link;
-            });
+            // // 2. 二次清洗：处理嵌套在跳转链接（如 ?url=...）中的真实地址
+            // const cleanMatches = rawMatches.map(link => {
+            //     // 如果包含 url=，则取其后的部分
+            //     if (link.includes('url=')) {
+            //         return link.split('url=')[1];
+            //     }
+            //     return link;
+            // });
 
             // 3. 去重并过滤干扰项
             const episodes = [...new Set(cleanMatches)].filter(link => 
-                link.startsWith('http') && !link.includes('thumb')
+                link.startsWith('http') && !link.includes('thumb') && !link.includes('?url')
             );
             
             return new Response(JSON.stringify({ episodes }), { headers: { 'Content-Type': 'application/json' } });
