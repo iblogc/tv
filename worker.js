@@ -171,6 +171,8 @@ const HTML_TEMPLATE = `
         let currentMovieName = ''; // 当前影片名称
         let currentMovieEpisodes = []; // 当前影片的所有集数数据
         let currentPlayingEpisode = null; // 记录当前播放的集数索引
+        let currentMovieId = null; // 当前影片 ID（用于重试）
+        let retryCount = new Map(); // 记录每个影片的重试次数
         
         // ============ 请求缓存系统 ============
         const detailCache = new Map(); // 缓存详情数据
@@ -357,6 +359,7 @@ const HTML_TEMPLATE = `
 
         async function showDetails(id, name) {
             const source = document.getElementById('apiSource').value;
+            currentMovieId = id; // 保存当前影片 ID
             
             // 检查缓存
             const cached = getCachedDetail(id, source);
@@ -374,22 +377,45 @@ const HTML_TEMPLATE = `
 
             // 如果请求超过 8 秒，再次更新提示
             const verySlowHint = setTimeout(() => {
-                updateLoadingText('正在努力加载，网络较慢请稍候...');
+                updateLoadingText('正在努力加载，可能即将超时...');
             }, 8000);
 
             try {
                 const response = await fetch('/api/detail?id=' + id + '&source=' + source);
                 const data = await response.json();
                 
-                if (data.episodes && data.episodes.length > 0) {
-                    // 缓存数据
+                // 根据不同状态处理
+                if (data.status === 'success' && data.episodes && data.episodes.length > 0) {
+                    // 成功获取到数据
                     setCachedDetail(id, source, data.episodes);
                     displayEpisodes(name, data.episodes);
+                } else if (data.status === 'empty') {
+                    // 请求成功但没有找到播放资源
+                    showToast('该影片暂无可用播放资源，请尝试更换资源站点', 4000);
+                } else if (data.status === 'error') {
+                    // 请求失败（超时、网络错误等）
+                    const retryKey = \`\${source}_\${id}\`;
+                    const currentRetries = retryCount.get(retryKey) || 0;
+                    retryCount.set(retryKey, currentRetries + 1);
+                    
+                    if (currentRetries === 0) {
+                        // 首次超时，给出明确的重试建议
+                        showToast('⏱️ 获取资源超时（首次加载较慢）\n💡 请点击该影片再试一次，通常第二次会成功', 6000);
+                    } else {
+                        // 多次超时
+                        showToast('请求超时，建议更换资源站点或稍后重试', 4000);
+                    }
                 } else {
-                    showToast('未找到播放资源，请尝试其他资源站点');
+                    // 兼容旧格式（没有 status 字段）
+                    if (data.episodes && data.episodes.length > 0) {
+                        setCachedDetail(id, source, data.episodes);
+                        displayEpisodes(name, data.episodes);
+                    } else {
+                        showToast('未找到播放资源，请尝试其他资源站点');
+                    }
                 }
             } catch (e) {
-                showToast('获取资源失败，请稍后重试或更换资源站点');
+                showToast('网络异常，请检查网络连接');
             } finally {
                 clearTimeout(slowHint);
                 clearTimeout(verySlowHint);
@@ -567,10 +593,11 @@ async function handleRequest(request) {
         const detailPageUrl = `${API_SITES[source].detail}/index.php/vod/detail/id/${id}.html`;
         try {
             // 带重试机制的 fetch 请求
+            // 注意：Cloudflare Workers 免费计划有 10 秒 CPU 时间限制
             const res = await fetchWithRetry(`https://r.jina.ai/${detailPageUrl}`, {
-                maxRetries: 3,        // 最大重试次数
-                timeoutMs: 15000,     // 单次请求超时 15 秒
-                retryDelayMs: 1000,   // 初始重试延迟 1 秒（指数退避）
+                maxRetries: 0,        // 最大重试 0 次（共 1 次请求机会）
+                timeoutMs: 10000,      // 单次请求超时 10 秒
+                retryDelayMs: 500,    // 重试延迟 0.5 秒
             });
             const content = await res.text();
             
@@ -591,9 +618,27 @@ async function handleRequest(request) {
                 link.startsWith('http') && !link.includes('thumb') && !link.includes('?url')
             );
             
-            return new Response(JSON.stringify({ episodes }), { headers: { 'Content-Type': 'application/json' } });
+            // 区分成功但无数据 vs 有数据
+            if (episodes.length > 0) {
+                return new Response(JSON.stringify({ episodes, status: 'success' }), { 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            } else {
+                // 请求成功但没有找到播放资源
+                return new Response(JSON.stringify({ episodes: [], status: 'empty' }), { 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
         } catch (e) {
-            return new Response(JSON.stringify({ episodes: [] }), { headers: { 'Content-Type': 'application/json' } });
+            // 请求失败（超时、网络错误等）
+            console.error('[API Error]', e.message);
+            return new Response(JSON.stringify({ 
+                episodes: [], 
+                status: 'error',
+                message: e.message || '请求失败'
+            }), { 
+                headers: { 'Content-Type': 'application/json' } 
+            });
         }
     }
 
