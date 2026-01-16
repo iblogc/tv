@@ -506,6 +506,8 @@ const HTML_TEMPLATE = `
         }
 
         function closeModal() {
+            // 清空 modalContent 以停止 iframe 视频播放
+            document.getElementById('modalContent').innerHTML = '';
             document.getElementById('modal').classList.add('hidden');
             document.body.style.overflow = 'auto';
         }
