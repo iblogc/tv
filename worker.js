@@ -362,7 +362,7 @@ const HTML_TEMPLATE = `
                                             class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium \${isPlaying ? 'playing' : ''}">
                                         第\${index + 1}集
                                     </button>
-                                `;
+                                \`;
                             }).join('')}
                         </div>
                     \`;
