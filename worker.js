@@ -41,9 +41,9 @@ const HTML_TEMPLATE = `
             background: rgba(20, 20, 20, 0.95); backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: white; padding: 12px 24px; border-radius: 12px;
-            font-size: 14px; z-index: 1000; opacity: 0;
+            font-size: 14px; z-index: 9999; opacity: 0;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            max-width: 90%; text-align: center;
+            max-width: 90%; text-align: center; white-space: pre-line;
         }
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         
