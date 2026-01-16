@@ -66,7 +66,7 @@ const HTML_TEMPLATE = `
             <input type="password" id="passwordInput" placeholder="请输入访问密码" 
                    class="w-full bg-[#111] border border-[#333] text-white px-5 py-4 rounded-xl 
                           focus:outline-none focus:border-white text-center text-lg mb-4 transition-all">
-            <button onclick="verifyPassword()" 
+            <button id="verifyBtn" 
                     class="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 active:scale-95 transition-all">
                 确认
             </button>
@@ -195,7 +195,7 @@ const HTML_TEMPLATE = `
         // ============ 缓存系统结束 ============
 
         // ============ 密码验证逻辑 ============
-        const PASSWORD_HASH = '518184acefb5f85cb4bfce03ce7d427d1577514fb5e6773fb909e58828b27cfb';
+        const PASSWORD_HASH = '47a20ec42aa1d4473eb5f0e82a7fb2ebb366f119dae0ad331d65b8327142899d';
 
         // 检查是否已通过验证
         function checkAuth() {
@@ -238,11 +238,20 @@ const HTML_TEMPLATE = `
         // 支持 Enter 键提交
         document.addEventListener('DOMContentLoaded', async () => {
             const pwdInput = document.getElementById('passwordInput');
+            const verifyBtn = document.getElementById('verifyBtn');
+            
+            // 绑定按钮点击事件
+            if (verifyBtn) {
+                verifyBtn.addEventListener('click', verifyPassword);
+            }
+            
+            // 绑定 Enter 键
             if (pwdInput) {
                 pwdInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') verifyPassword();
                 });
             }
+            
             checkAuth(); // 页面加载时检查验证状态
             
             // 调试：在控制台输出正确的密码哈希（生产环境可删除）
