@@ -168,8 +168,29 @@ const HTML_TEMPLATE = `
         let currentEpName = '';
         let currentSelectedIdx = parseInt(localStorage.getItem('preferred_jiexi_idx') || '0');
         let searchHistory = JSON.parse(localStorage.getItem('movie_search_history') || '[]');
-        let lastEpisodesHtml = '';
+        let currentMovieName = ''; // 当前影片名称
+        let currentMovieEpisodes = []; // 当前影片的所有集数数据
         let currentPlayingEpisode = null; // 记录当前播放的集数索引
+        
+        // ============ 请求缓存系统 ============
+        const detailCache = new Map(); // 缓存详情数据
+        const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存时间
+        
+        function getCachedDetail(id, source) {
+            const key = \`\${source}_\${id}\`;
+            const cached = detailCache.get(key);
+            if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+                console.log('使用缓存数据:', key);
+                return cached.data;
+            }
+            return null;
+        }
+        
+        function setCachedDetail(id, source, data) {
+            const key = \`\${source}_\${id}\`;
+            detailCache.set(key, { data, timestamp: Date.now() });
+        }
+        // ============ 缓存系统结束 ============
 
         // ============ 密码验证逻辑 ============
         const PASSWORD_HASH = '518184acefb5f85cb4bfce03ce7d427d1577514fb5e6773fb909e58828b27cfb';
@@ -335,8 +356,16 @@ const HTML_TEMPLATE = `
         }
 
         async function showDetails(id, name) {
-            showLoading('正在获取播放资源...');
             const source = document.getElementById('apiSource').value;
+            
+            // 检查缓存
+            const cached = getCachedDetail(id, source);
+            if (cached) {
+                displayEpisodes(name, cached);
+                return;
+            }
+            
+            showLoading('正在获取播放资源...');
 
             // 如果请求超过 3 秒，更新提示让用户知道可能需要等待
             const slowHint = setTimeout(() => {
@@ -353,36 +382,50 @@ const HTML_TEMPLATE = `
                 const data = await response.json();
                 
                 if (data.episodes && data.episodes.length > 0) {
-                    lastEpisodesHtml = \`
-                        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                            \${data.episodes.map((url, index) => {
-                                const isPlaying = currentPlayingEpisode === index;
-                                return \`
-                                    <button onclick="playVideo('\${url}', '\${name}', \${index + 1}, \${index})" 
-                                            class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium \${isPlaying ? 'playing' : ''}">
-                                        第\${index + 1}集
-                                    </button>
-                                \`;
-                            }).join('')}
-                        </div>
-                    \`;
-                    
-                    document.getElementById('modalTitle').textContent = name;
-                    document.getElementById('modalContent').innerHTML = lastEpisodesHtml;
-                    document.getElementById('modal').classList.remove('hidden');
-                    document.body.style.overflow = 'hidden';
+                    // 缓存数据
+                    setCachedDetail(id, source, data.episodes);
+                    displayEpisodes(name, data.episodes);
                 } else {
-                    // 没有找到播放资源时的提示
                     showToast('未找到播放资源，请尝试其他资源站点');
                 }
             } catch (e) {
-                // 请求失败时的错误提示
                 showToast('获取资源失败，请稍后重试或更换资源站点');
             } finally {
                 clearTimeout(slowHint);
                 clearTimeout(verySlowHint);
                 hideLoading();
             }
+        }
+        
+        // 显示集数列表
+        function displayEpisodes(name, episodes) {
+            currentMovieName = name;
+            currentMovieEpisodes = episodes;
+            currentPlayingEpisode = null; // 重置播放状态
+            
+            const episodesHtml = generateEpisodesHtml();
+            
+            document.getElementById('modalTitle').textContent = name;
+            document.getElementById('modalContent').innerHTML = episodesHtml;
+            document.getElementById('modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // 生成集数按钮 HTML（动态生成以保持高亮状态）
+        function generateEpisodesHtml() {
+            return \`
+                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    \${currentMovieEpisodes.map((url, index) => {
+                        const isPlaying = currentPlayingEpisode === index;
+                        return \`
+                            <button onclick="playVideo('\${url}', '\${currentMovieName}', \${index + 1}, \${index})" 
+                                    class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium \${isPlaying ? 'playing' : ''}">
+                                第\${index + 1}集
+                            </button>
+                        \`;
+                    }).join('')}
+                </div>
+            \`;
         }
 
         function playVideo(url, name, ep, index) {
@@ -418,7 +461,7 @@ const HTML_TEMPLATE = `
 
                     <div>
                         <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-4">选集播放</p>
-                        <div id="epListPlaceholder">\${lastEpisodesHtml}</div>
+                        <div id="epListPlaceholder">\${generateEpisodesHtml()}</div>
                     </div>
                 </div>
             \`;
