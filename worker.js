@@ -414,7 +414,7 @@ const HTML_TEMPLATE = `
                     displayEpisodes(name, data.episodes);
                 } else if (data.status === 'empty') {
                     // 请求成功但没有找到播放资源
-                    showToast('该影片暂无可用播放资源，请尝试更换资源站点', 4000);
+                    displayError(name, '该影片暂无可用播放资源', '请尝试更换资源站点或稍后重试');
                 } else if (data.status === 'error') {
                     // 请求失败（超时、网络错误等）
                     const retryKey = \`\${source}_\${id}\`;
@@ -423,10 +423,10 @@ const HTML_TEMPLATE = `
                     
                     if (currentRetries === 0) {
                         // 首次超时，给出明确的重试建议
-                        showToast('⏱️ 首次加载较慢已超时，请再次点击该影片重试（通常第二次会成功）', 6000);
+                        displayError(name, '⏱️ 获取资源超时', '首次加载较慢是正常现象，请关闭此窗口后再次点击该影片重试，通常第二次会成功。');
                     } else {
                         // 多次超时
-                        showToast('请求超时，建议更换资源站点或稍后重试', 4000);
+                        displayError(name, '请求超时', '建议更换资源站点或稍后重试');
                     }
                 } else {
                     // 兼容旧格式（没有 status 字段）
@@ -434,11 +434,11 @@ const HTML_TEMPLATE = `
                         setCachedDetail(id, source, data.episodes);
                         displayEpisodes(name, data.episodes);
                     } else {
-                        showToast('未找到播放资源，请尝试其他资源站点');
+                        displayError(name, '未找到播放资源', '请尝试更换资源站点');
                     }
                 }
             } catch (e) {
-                showToast('网络异常，请检查网络连接');
+                displayError(name, '网络异常', '请检查网络连接后重试');
             } finally {
                 clearTimeout(slowHint);
                 clearTimeout(verySlowHint);
@@ -456,6 +456,27 @@ const HTML_TEMPLATE = `
             
             document.getElementById('modalTitle').textContent = name;
             document.getElementById('modalContent').innerHTML = episodesHtml;
+            document.getElementById('modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // 显示错误信息
+        function displayError(name, title, message) {
+            document.getElementById('modalTitle').textContent = name;
+            document.getElementById('modalContent').innerHTML = \`
+                <div class="flex flex-col items-center justify-center py-16 px-4">
+                    <div class="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
+                        <svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3">\${title}</h3>
+                    <p class="text-gray-400 text-center text-sm leading-relaxed mb-8 max-w-md">\${message}</p>
+                    <button onclick="closeModal()" class="px-8 py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 active:scale-95 transition-all">
+                        关闭
+                    </button>
+                </div>
+            \`;
             document.getElementById('modal').classList.remove('hidden');
             document.body.style.overflow = 'hidden';
         }
