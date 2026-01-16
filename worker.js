@@ -31,8 +31,9 @@ const HTML_TEMPLATE = `
         .line-btn.active { background: white !important; color: black !important; border-color: white !important; }
     </style>
 </head>
+
 <body class="page-bg text-white overflow-x-hidden">
-    <div class="fixed top-4 right-4 z-50">
+    <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
         <button onclick="toggleSettings(event)" class="bg-[#222]/60 hover:bg-[#333] border border-[#333] rounded-full p-2.5 backdrop-blur-md">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         </button>
@@ -58,6 +59,12 @@ const HTML_TEMPLATE = `
                     <option value="jszy">🏎️ 极速资源</option>
                     <option value="dbzy">🔔 豆瓣资源</option>
                 </select>
+                <div class="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                    <span class="text-[10px] text-gray-500 uppercase">当前站点状态</span>
+                    <span id="siteStatus" class="flex items-center gap-1.5 text-[10px] font-medium transition-all duration-300">
+                        <span class="w-2 h-2 rounded-full bg-gray-500"></span> 正在检测...
+                    </span>
+                </div>
             </div>
         </div>
     </div>
@@ -115,9 +122,27 @@ const HTML_TEMPLATE = `
         let currentEpName = '';
         let currentSelectedIdx = parseInt(localStorage.getItem('preferred_jiexi_idx') || '0');
         let searchHistory = JSON.parse(localStorage.getItem('movie_search_history') || '[]');
-        let lastEpisodesHtml = ''; // 缓存集数列表
+        let lastEpisodesHtml = ''; 
 
         function toggleSettings(e) { e && e.stopPropagation(); document.getElementById('settingsPanel').classList.toggle('show'); }
+
+        async function testSiteAvailability() {
+            const statusEl = document.getElementById('siteStatus');
+            const source = document.getElementById('apiSource').value;
+            statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> 检测中...';
+            statusEl.className = "flex items-center gap-1.5 text-[10px] font-medium text-yellow-500";
+            
+            try {
+                const response = await fetch('/api/search?wd=test&source=' + source);
+                const data = await response.json();
+                if (data.code === 400) throw new Error();
+                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> 服务可用';
+                statusEl.className = "flex items-center gap-1.5 text-[10px] font-medium text-green-500";
+            } catch (error) {
+                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> 连接失败';
+                statusEl.className = "flex items-center gap-1.5 text-[10px] font-medium text-red-500";
+            }
+        }
 
         function renderHistory() {
             const container = document.getElementById('historyContainer');
@@ -178,7 +203,6 @@ const HTML_TEMPLATE = `
                 const response = await fetch('/api/detail?id=' + id + '&source=' + source);
                 const data = await response.json();
                 
-                // 构造并保存选集 HTML
                 lastEpisodesHtml = \`
                     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         \${data.episodes.map((url, index) => \`
@@ -207,7 +231,6 @@ const HTML_TEMPLATE = `
             document.getElementById('modalTitle').textContent = currentEpName;
             const playerUrl = JIE_XI_LIST[currentSelectedIdx].url + currentVideoUrl;
             
-            // 线路按钮 HTML
             const lineBtnsHtml = JIE_XI_LIST.map((line, idx) => \`
                 <button onclick="changeLine(\${idx})" 
                         class="line-btn px-4 py-2 text-[11px] rounded-lg border border-[#333] bg-[#111] transition-all \${idx === currentSelectedIdx ? 'active' : 'text-gray-400 hover:border-white'}">
@@ -249,13 +272,15 @@ const HTML_TEMPLATE = `
         }
 
         document.getElementById('searchInput').addEventListener('keypress', (e) => e.key === 'Enter' && search());
+        document.getElementById('apiSource').addEventListener('change', testSiteAvailability);
+        
         renderHistory();
+        testSiteAvailability();
     </script>
 </body>
 </html>
 `;
 
-// 后端配置：增加更多站点
 const API_SITES = {
     lzzy: { api: 'https://cj.lziapi.com', name: '量子资源', detail: 'https://lzizy2.com' },
     snzy: { api: 'https://suoniapi.com', name: '索尼资源', detail: 'https://www.suonizy.com' },
@@ -275,19 +300,32 @@ async function handleRequest(request) {
 
     if (url.pathname === '/api/search') {
         const wd = url.searchParams.get('wd');
-        const apiUrl = `${API_SITES[source].api}/api.php/provide/vod/?ac=list&wd=${encodeURIComponent(wd)}`;
-        const res = await fetch(apiUrl);
-        return new Response(await res.text(), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        try {
+            const apiUrl = `${API_SITES[source].api}/api.php/provide/vod/?ac=list&wd=${encodeURIComponent(wd)}`;
+            const res = await fetch(apiUrl);
+            if (!res.ok) throw new Error();
+            return new Response(await res.text(), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+        } catch (e) {
+            return new Response(JSON.stringify({ code: 400, msg: 'Error', list: [] }), { headers: { 'Content-Type': 'application/json' } });
+        }
     }
 
     if (url.pathname === '/api/detail') {
         const id = url.searchParams.get('id');
         const detailPageUrl = `${API_SITES[source].detail}/index.php/vod/detail/id/${id}.html`;
-        const res = await fetch(`https://r.jina.ai/${detailPageUrl}`);
-        const content = await res.text();
-        const matches = content.match(/https?:\/\/[^"'\s\n$]+?\.m3u8/g) || [];
-        const episodes = [...new Set(matches)].filter(link => !link.includes('thumb'));
-        return new Response(JSON.stringify({ episodes }), { headers: { 'Content-Type': 'application/json' } });
+        try {
+            const res = await fetch(`https://r.jina.ai/${detailPageUrl}`);
+            const content = await res.text();
+            
+            // 优化后的正则：匹配不含括号、括号、Markdown语法的纯净 URL
+            // 排除 ( ) [ ] " ' 以及空白字符
+            const matches = content.match(/https?:\/\/[^"'\s\(\)\[\]]+?\.m3u8/g) || [];
+            const episodes = [...new Set(matches)].filter(link => !link.includes('thumb'));
+            
+            return new Response(JSON.stringify({ episodes }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (e) {
+            return new Response(JSON.stringify({ episodes: [] }), { headers: { 'Content-Type': 'application/json' } });
+        }
     }
 
     return new Response(HTML_TEMPLATE, { headers: { 'Content-Type': 'text/html' } });
