@@ -172,7 +172,7 @@ const HTML_TEMPLATE = `
         let currentPlayingEpisode = null; // 记录当前播放的集数索引
 
         // ============ 密码验证逻辑 ============
-        const PASSWORD_HASH = 'e3d0e8f6b1a5c4d7e9f2a6b3c8d1e5f9a2b7c4d0e6f3a9b5c2d8e1f7a4b6c3d9';
+        const PASSWORD_HASH = '518184acefb5f85cb4bfce03ce7d427d1577514fb5e6773fb909e58828b27cfb';
 
         // 检查是否已通过验证
         function checkAuth() {
@@ -227,6 +227,17 @@ const HTML_TEMPLATE = `
             console.log('正确的密码哈希:', correctHash);
         });
         // ============ 密码验证逻辑结束 ============ 
+
+        // ============ Toast 提示系统 ============
+        function showToast(message, duration = 3000) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, duration);
+        }
+        // ============ Toast 系统结束 ============ 
 
         // 显示加载状态，可选地带有提示文字
         function showLoading(message = '') {
@@ -316,10 +327,10 @@ const HTML_TEMPLATE = `
                         </div>
                     \`).join('');
                 } else {
-                    alert('未找到相关影片，请尝试其他关键词');
+                    showToast('未找到相关影片，请尝试其他关键词');
                 }
             } catch (error) {
-                alert('搜索失败，请稍后重试');
+                showToast('搜索失败，请稍后重试');
             } finally { hideLoading(); }
         }
 
@@ -344,12 +355,15 @@ const HTML_TEMPLATE = `
                 if (data.episodes && data.episodes.length > 0) {
                     lastEpisodesHtml = \`
                         <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                            \${data.episodes.map((url, index) => \`
-                                <button onclick="playVideo('\${url}', '\${name}', \${index + 1})" 
-                                        class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium">
-                                    第\${index + 1}集
-                                </button>
-                            \`).join('')}
+                            \${data.episodes.map((url, index) => {
+                                const isPlaying = currentPlayingEpisode === index;
+                                return \`
+                                    <button onclick="playVideo('\${url}', '\${name}', \${index + 1}, \${index})" 
+                                            class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium \${isPlaying ? 'playing' : ''}">
+                                        第\${index + 1}集
+                                    </button>
+                                `;
+                            }).join('')}
                         </div>
                     \`;
                     
@@ -359,11 +373,11 @@ const HTML_TEMPLATE = `
                     document.body.style.overflow = 'hidden';
                 } else {
                     // 没有找到播放资源时的提示
-                    alert('未找到播放资源，请尝试其他资源站点');
+                    showToast('未找到播放资源，请尝试其他资源站点');
                 }
             } catch (e) {
                 // 请求失败时的错误提示
-                alert('获取资源失败，请稍后重试或更换资源站点');
+                showToast('获取资源失败，请稍后重试或更换资源站点');
             } finally {
                 clearTimeout(slowHint);
                 clearTimeout(verySlowHint);
@@ -371,9 +385,10 @@ const HTML_TEMPLATE = `
             }
         }
 
-        function playVideo(url, name, ep) {
+        function playVideo(url, name, ep, index) {
             currentVideoUrl = url;
             currentEpName = \`\${name} - 第\${ep}集\`;
+            currentPlayingEpisode = index; // 记录当前播放的集数索引
             renderPlayer();
         }
 
