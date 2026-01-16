@@ -101,11 +101,13 @@ const HTML_TEMPLATE = `
 
     <script>
         const JIE_XI_LIST = [
-            { name: '线路一', url: 'https://hoplayer.com/index.html?url=' },
-            { name: '线路二', url: 'https://jx.jsonplayer.com/player/?url=' },
-            { name: '线路三', url: 'https://jx.m3u8.tv/jiexi/?url=' },
-            { name: '线路四', url: 'https://www.ckplayer.vip/jiexi/?url=' },
-            { name: '线路五', url: 'https://jx.xmflv.com/?url=' }
+            { name: '线路1', url: 'https://m3u8player.co/player.html?url=' },
+            { name: '线路2', url: 'https://playhls.com/?url=' },
+            { name: '线路3', url: 'https://hoplayer.com/index.html?url=' },
+            { name: '线路4', url: 'https://jx.jsonplayer.com/player/?url=' },
+            { name: '线路5', url: 'https://jx.m3u8.tv/jiexi/?url=' },
+            { name: '线路6', url: 'https://www.ckplayer.vip/jiexi/?url=' },
+            { name: '线路7', url: 'https://jx.xmflv.com/?url=' },
         ];
 
         let currentVideoUrl = '';
