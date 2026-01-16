@@ -26,6 +26,8 @@ const HTML_TEMPLATE = `
         .settings-panel.show { transform: translateX(0); }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .loading-text { animation: pulse 1.5s ease-in-out infinite; }
         .animate-results { animation: fadeIn 0.5s ease forwards; }
         .history-tag { cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
         .line-btn.active { background: white !important; color: black !important; border-color: white !important; }
@@ -103,7 +105,10 @@ const HTML_TEMPLATE = `
     </div>
 
     <div id="loading" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[150] backdrop-blur-sm">
-        <div class="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+        <div class="flex flex-col items-center gap-4">
+            <div class="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+            <div id="loadingText" class="loading-text text-sm text-white/80 text-center max-w-xs px-4"></div>
+        </div>
     </div>
 
     <script>
@@ -123,6 +128,25 @@ const HTML_TEMPLATE = `
         let currentSelectedIdx = parseInt(localStorage.getItem('preferred_jiexi_idx') || '0');
         let searchHistory = JSON.parse(localStorage.getItem('movie_search_history') || '[]');
         let lastEpisodesHtml = ''; 
+
+        // 显示加载状态，可选地带有提示文字
+        function showLoading(message = '') {
+            const loadingEl = document.getElementById('loading');
+            const textEl = document.getElementById('loadingText');
+            textEl.textContent = message;
+            loadingEl.style.display = 'flex';
+        }
+
+        // 更新加载提示文字（不改变显示状态）
+        function updateLoadingText(message) {
+            document.getElementById('loadingText').textContent = message;
+        }
+
+        // 隐藏加载状态
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('loadingText').textContent = '';
+        }
 
         function toggleSettings(e) { e && e.stopPropagation(); document.getElementById('settingsPanel').classList.toggle('show'); }
 
@@ -294,6 +318,50 @@ const API_SITES = {
     dbzy: { api: 'https://dbzyapi.com', name: '豆瓣资源', detail: 'https://dbzyw.com' }
 };
 
+/**
+ * 带重试机制的 fetch 请求
+ * @param {string} url - 请求 URL
+ * @param {Object} options - 配置选项
+ * @param {number} options.maxRetries - 最大重试次数，默认 3
+ * @param {number} options.timeoutMs - 单次请求超时时间（毫秒），默认 15000
+ * @param {number} options.retryDelayMs - 初始重试延迟（毫秒），采用指数退避，默认 1000
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(url, options = {}) {
+    const { maxRetries = 3, timeoutMs = 15000, retryDelayMs = 1000 } = options;
+    let lastError;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            // 使用 AbortController 实现请求超时
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            // 检查 HTTP 状态码，非 2xx 视为失败
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return response;
+        } catch (error) {
+            lastError = error;
+
+            // 如果已达到最大重试次数，则抛出错误
+            if (attempt >= maxRetries) {
+                throw new Error(`请求失败，已重试 ${maxRetries} 次: ${lastError.message}`);
+            }
+
+            // 指数退避延迟：1s -> 2s -> 4s ...
+            const delay = retryDelayMs * Math.pow(2, attempt);
+            console.log(`[Retry] 第 ${attempt + 1} 次重试，${delay}ms 后重试... 错误: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
 async function handleRequest(request) {
     const url = new URL(request.url);
     const source = url.searchParams.get('source') || 'lzzy';
@@ -314,7 +382,12 @@ async function handleRequest(request) {
         const id = url.searchParams.get('id');
         const detailPageUrl = `${API_SITES[source].detail}/index.php/vod/detail/id/${id}.html`;
         try {
-            const res = await fetch(`https://r.jina.ai/${detailPageUrl}`);
+            // 带重试机制的 fetch 请求
+            const res = await fetchWithRetry(`https://r.jina.ai/${detailPageUrl}`, {
+                maxRetries: 3,        // 最大重试次数
+                timeoutMs: 15000,     // 单次请求超时 15 秒
+                retryDelayMs: 1000,   // 初始重试延迟 1 秒（指数退避）
+            });
             const content = await res.text();
             
             // 1. 初始匹配：提取所有可能的 m3u8 链接
@@ -330,7 +403,7 @@ async function handleRequest(request) {
             // });
 
             // 3. 去重并过滤干扰项
-            const episodes = [...new Set(cleanMatches)].filter(link => 
+            const episodes = [...new Set(rawMatches)].filter(link => 
                 link.startsWith('http') && !link.includes('thumb') && !link.includes('?url')
             );
             
