@@ -7,7 +7,6 @@ const HTML_TEMPLATE = `
     <title>MOVIE HUB</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/705/705062.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .page-bg {
@@ -28,7 +27,7 @@ const HTML_TEMPLATE = `
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-results { animation: fadeIn 0.5s ease forwards; }
         .history-tag { cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
-        .history-tag:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+        .line-btn.active { background: white !important; color: black !important; border-color: white !important; }
     </style>
 </head>
 <body class="page-bg text-white overflow-x-hidden">
@@ -53,10 +52,11 @@ const HTML_TEMPLATE = `
                     <option value="ffzy">⚡ 非凡影视</option>
                     <option value="wlzy">🐉 卧龙资源</option>
                     <option value="tkyun">☁️ 天空资源</option>
+                    <option value="kczy">🚀 快车资源</option>
+                    <option value="hnzy">🐂 红牛资源</option>
+                    <option value="jszy">🏎️ 极速资源</option>
+                    <option value="dbzy">🔔 豆瓣资源</option>
                 </select>
-            </div>
-            <div class="pt-4 border-t border-[#222]">
-                <p class="text-[10px] text-gray-500">提示：如遇搜不到，请尝试切换站点。</p>
             </div>
         </div>
     </div>
@@ -72,10 +72,9 @@ const HTML_TEMPLATE = `
                 <div class="relative flex items-center mb-6">
                     <input type="text" id="searchInput" 
                            class="w-full bg-[#111]/80 border border-[#333] text-white px-5 md:px-8 py-4 md:py-5 rounded-2xl focus:outline-none focus:border-white transition-all text-base md:text-lg backdrop-blur-md" 
-                           placeholder="输入影片名...">
+                           placeholder="影片名称...">
                     <button onclick="search()" class="absolute right-2 px-6 md:px-8 py-2.5 md:py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 active:scale-95 transition-all">搜索</button>
                 </div>
-                
                 <div id="historyContainer" class="flex flex-wrap gap-2 transition-opacity duration-300"></div>
             </div>
         </div>
@@ -103,41 +102,34 @@ const HTML_TEMPLATE = `
         const JIE_XI_LIST = [
             { name: '线路一', url: 'https://hoplayer.com/index.html?url=' },
             { name: '线路二', url: 'https://jx.jsonplayer.com/player/?url=' },
-            { name: '线路三', url: 'https://jx.m3u8.tv/jiexi/?url=' }
+            { name: '线路三', url: 'https://jx.m3u8.tv/jiexi/?url=' },
+            { name: '线路四', url: 'https://www.ckplayer.vip/jiexi/?url=' },
+            { name: '线路五', url: 'https://jx.xmflv.com/?url=' }
         ];
 
         let currentVideoUrl = '';
-        let currentEpTitle = '';
-        let currentJiexiIdx = 0;
+        let currentEpName = '';
+        let currentSelectedIdx = parseInt(localStorage.getItem('preferred_jiexi_idx') || '0');
         let searchHistory = JSON.parse(localStorage.getItem('movie_search_history') || '[]');
+        let lastEpisodesHtml = ''; // 缓存集数列表
 
         function toggleSettings(e) { e && e.stopPropagation(); document.getElementById('settingsPanel').classList.toggle('show'); }
 
-        // 历史记录渲染
         function renderHistory() {
             const container = document.getElementById('historyContainer');
             if (searchHistory.length === 0) { container.innerHTML = ''; return; }
             container.innerHTML = searchHistory.map(h => \`
                 <span class="history-tag text-[11px] px-3 py-1.5 rounded-lg text-gray-400" onclick="quickSearch('\${h}')">\${h}</span>
-            \`).join('') + '<span class="text-[11px] px-3 py-1.5 text-red-500/50 cursor-pointer" onclick="clearHistory()">清空记录</span>';
+            \`).join('') + '<span class="text-[11px] px-3 py-1.5 text-red-500/50 cursor-pointer" onclick="clearHistory()">清空</span>';
         }
 
-        function quickSearch(wd) {
-            document.getElementById('searchInput').value = wd;
-            search();
-        }
-
-        function clearHistory() {
-            searchHistory = [];
-            localStorage.setItem('movie_search_history', '[]');
-            renderHistory();
-        }
+        function quickSearch(wd) { document.getElementById('searchInput').value = wd; search(); }
+        function clearHistory() { searchHistory = []; localStorage.setItem('movie_search_history', '[]'); renderHistory(); }
 
         async function search() {
             const query = document.getElementById('searchInput').value.trim();
             if(!query) return;
 
-            // 保存历史
             if (!searchHistory.includes(query)) {
                 searchHistory.unshift(query);
                 searchHistory = searchHistory.slice(0, 10);
@@ -181,17 +173,21 @@ const HTML_TEMPLATE = `
             try {
                 const response = await fetch('/api/detail?id=' + id + '&source=' + source);
                 const data = await response.json();
-                document.getElementById('modalTitle').textContent = name;
-                document.getElementById('modalContent').innerHTML = \`
-                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" id="epList">
+                
+                // 构造并保存选集 HTML
+                lastEpisodesHtml = \`
+                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         \${data.episodes.map((url, index) => \`
                             <button onclick="playVideo('\${url}', '\${name}', \${index + 1})" 
-                                    class="px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium">
+                                    class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium">
                                 第\${index + 1}集
                             </button>
                         \`).join('')}
                     </div>
                 \`;
+                
+                document.getElementById('modalTitle').textContent = name;
+                document.getElementById('modalContent').innerHTML = lastEpisodesHtml;
                 document.getElementById('modal').classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
             } catch (e) {} finally { document.getElementById('loading').style.display = 'none'; }
@@ -199,45 +195,53 @@ const HTML_TEMPLATE = `
 
         function playVideo(url, name, ep) {
             currentVideoUrl = url;
-            currentEpTitle = \`\${name} - 第\${ep}集\`;
-            const epListHtml = document.getElementById('epList').outerHTML;
+            currentEpName = \`\${name} - 第\${ep}集\`;
             renderPlayer();
         }
 
         function renderPlayer() {
-            document.getElementById('modalTitle').textContent = currentEpTitle;
-            const playerUrl = JIE_XI_LIST[currentJiexiIdx].url + currentVideoUrl;
+            document.getElementById('modalTitle').textContent = currentEpName;
+            const playerUrl = JIE_XI_LIST[currentSelectedIdx].url + currentVideoUrl;
             
+            // 线路按钮 HTML
+            const lineBtnsHtml = JIE_XI_LIST.map((line, idx) => \`
+                <button onclick="changeLine(\${idx})" 
+                        class="line-btn px-4 py-2 text-[11px] rounded-lg border border-[#333] bg-[#111] transition-all \${idx === currentSelectedIdx ? 'active' : 'text-gray-400 hover:border-white'}">
+                    \${line.name}
+                </button>
+            \`).join('');
+
             document.getElementById('modalContent').innerHTML = \`
                 <div class="flex flex-col gap-6">
-                    <div class="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+                    <div class="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-[#222]">
                         <iframe src="\${playerUrl}" class="w-full h-full border-0" allowfullscreen></iframe>
                     </div>
-                    <div class="flex items-center justify-between bg-[#111] p-4 rounded-xl border border-[#222]">
-                        <div class="text-xs text-gray-400">正在通过 <span class="text-white font-bold">\${JIE_XI_LIST[currentJiexiIdx].name}</span> 解析</div>
-                        <button onclick="switchJiexi()" class="text-xs bg-white text-black px-4 py-2 rounded-lg font-bold">切换线路</button>
+                    
+                    <div class="flex flex-col gap-3">
+                        <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">切换解析线路</p>
+                        <div class="flex flex-wrap gap-2">
+                            \${lineBtnsHtml}
+                        </div>
                     </div>
+
                     <div>
                         <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-4">选集播放</p>
-                        <div id="epListPlaceholder"></div>
+                        <div id="epListPlaceholder">\${lastEpisodesHtml}</div>
                     </div>
                 </div>
             \`;
-            // 重新挂载选集列表
-            const currentEpList = document.getElementById('epList');
-            if(currentEpList) document.getElementById('epListPlaceholder').appendChild(currentEpList);
             document.getElementById('modal').scrollTo({top: 0, behavior: 'smooth'});
         }
 
-        function switchJiexi() {
-            currentJiexiIdx = (currentJiexiIdx + 1) % JIE_XI_LIST.length;
+        function changeLine(idx) {
+            currentSelectedIdx = idx;
+            localStorage.setItem('preferred_jiexi_idx', idx);
             renderPlayer();
         }
 
         function closeModal() {
             document.getElementById('modal').classList.add('hidden');
             document.body.style.overflow = 'auto';
-            currentJiexiIdx = 0; // 重置线路
         }
 
         document.getElementById('searchInput').addEventListener('keypress', (e) => e.key === 'Enter' && search());
@@ -247,13 +251,18 @@ const HTML_TEMPLATE = `
 </html>
 `;
 
+// 后端配置：增加更多站点
 const API_SITES = {
     lzzy: { api: 'https://cj.lziapi.com', name: '量子资源', detail: 'https://lzizy2.com' },
     snzy: { api: 'https://suoniapi.com', name: '索尼资源', detail: 'https://www.suonizy.com' },
     heimuer: { api: 'https://json.heimuer.xyz', name: '黑木耳', detail: 'https://heimuer.tv' },
     ffzy: { api: 'http://ffzy5.tv', name: '非凡影视', detail: 'http://ffzy5.tv' },
     wlzy: { api: 'https://collect.wolongzyw.com', name: '卧龙资源', detail: 'https://www.wolongzyw.com' },
-    tkyun: { api: 'https://api.tiankongapi.com', name: '天空资源', detail: 'https://tiankongzy.com' }
+    tkyun: { api: 'https://api.tiankongapi.com', name: '天空资源', detail: 'https://tiankongzy.com' },
+    kczy: { api: 'https://www.kczyapi.com', name: '快车资源', detail: 'https://www.kczyw.com' },
+    hnzy: { api: 'https://www.hongniuzy2.com', name: '红牛资源', detail: 'https://www.hongniuzy.com' },
+    jszy: { api: 'https://jszyapi.com', name: '极速资源', detail: 'https://jszyw.com' },
+    dbzy: { api: 'https://dbzyapi.com', name: '豆瓣资源', detail: 'https://dbzyw.com' }
 };
 
 async function handleRequest(request) {
