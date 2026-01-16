@@ -123,6 +123,24 @@ const HTML_TEMPLATE = `
                            placeholder="影片名称...">
                     <button onclick="search()" class="absolute right-2 px-6 md:px-8 py-2.5 md:py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 active:scale-95 transition-all">搜索</button>
                 </div>
+                
+                <!-- 使用提示 -->
+                <div class="mb-6 p-4 bg-[#111]/60 border border-[#333]/50 rounded-xl backdrop-blur-md">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 mt-0.5">
+                            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs text-gray-400 leading-relaxed">
+                                <span class="text-blue-400 font-medium">💡 使用提示：</span>
+                                有时点击影片可能会出现闪一下但无反应的情况，这是正常现象，<span class="text-white/90">多点击几次重试即可</span>成功加载。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
                 <div id="historyContainer" class="flex flex-wrap gap-2 transition-opacity duration-300"></div>
             </div>
         </div>
