@@ -27,14 +27,52 @@ const HTML_TEMPLATE = `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
         .loading-text { animation: pulse 1.5s ease-in-out infinite; }
         .animate-results { animation: fadeIn 0.5s ease forwards; }
         .history-tag { cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
         .line-btn.active { background: white !important; color: black !important; border-color: white !important; }
+        .shake { animation: shake 0.4s ease; }
+        .ep-btn.playing { background: white !important; color: black !important; border-color: white !important; }
+        
+        /* Toast 提示样式 */
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px);
+            background: rgba(20, 20, 20, 0.95); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white; padding: 12px 24px; border-radius: 12px;
+            font-size: 14px; z-index: 1000; opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            max-width: 90%; text-align: center;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            .ep-btn { min-height: 44px !important; } /* 增大移动端点击区域 */
+            body { padding-bottom: env(safe-area-inset-bottom); } /* 底部安全区 */
+        }
     </style>
 </head>
 
 <body class="page-bg text-white overflow-x-hidden">
+    <!-- 密码验证界面 -->
+    <div id="authScreen" class="fixed inset-0 bg-black z-[200] flex items-center justify-center">
+        <div class="text-center w-full max-w-sm px-6">
+            <div class="mb-8">
+                <h1 class="text-5xl font-black gradient-text mb-2">MOVIE HUB</h1>
+                <p class="text-gray-500 text-xs uppercase tracking-widest">Access Control</p>
+            </div>
+            <input type="password" id="passwordInput" placeholder="请输入访问密码" 
+                   class="w-full bg-[#111] border border-[#333] text-white px-5 py-4 rounded-xl 
+                          focus:outline-none focus:border-white text-center text-lg mb-4 transition-all">
+            <button onclick="verifyPassword()" 
+                    class="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 active:scale-95 transition-all">
+                确认
+            </button>
+            <p id="authError" class="text-red-400 text-sm mt-4 opacity-0 transition-opacity">密码错误，请重试</p>
+        </div>
+    </div>
     <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
         <button onclick="toggleSettings(event)" class="bg-[#222]/60 hover:bg-[#333] border border-[#333] rounded-full p-2.5 backdrop-blur-md">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -109,6 +147,9 @@ const HTML_TEMPLATE = `
             <div class="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
             <div id="loadingText" class="loading-text text-sm text-white/80 text-center max-w-xs px-4"></div>
         </div>
+
+    <!-- Toast 提示组件 -->
+    <div id="toast" class="toast"></div>
     </div>
 
     <script>
@@ -127,7 +168,65 @@ const HTML_TEMPLATE = `
         let currentEpName = '';
         let currentSelectedIdx = parseInt(localStorage.getItem('preferred_jiexi_idx') || '0');
         let searchHistory = JSON.parse(localStorage.getItem('movie_search_history') || '[]');
-        let lastEpisodesHtml = ''; 
+        let lastEpisodesHtml = '';
+        let currentPlayingEpisode = null; // 记录当前播放的集数索引
+
+        // ============ 密码验证逻辑 ============
+        const PASSWORD_HASH = 'e3d0e8f6b1a5c4d7e9f2a6b3c8d1e5f9a2b7c4d0e6f3a9b5c2d8e1f7a4b6c3d9';
+
+        // 检查是否已通过验证
+        function checkAuth() {
+            const isAuthed = localStorage.getItem('movie_hub_authed') === 'true';
+            const authScreen = document.getElementById('authScreen');
+            if (isAuthed) {
+                authScreen.style.display = 'none';
+            } else {
+                authScreen.style.display = 'flex';
+            }
+        }
+
+        // SHA-256 哈希函数
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // 验证密码
+        async function verifyPassword() {
+            const input = document.getElementById('passwordInput');
+            const errorEl = document.getElementById('authError');
+            const hash = await sha256(input.value);
+            
+            if (hash === PASSWORD_HASH) {
+                localStorage.setItem('movie_hub_authed', 'true');
+                document.getElementById('authScreen').style.display = 'none';
+                errorEl.style.opacity = '0';
+            } else {
+                // 显示错误提示并震动输入框
+                input.classList.add('shake');
+                errorEl.style.opacity = '1';
+                input.value = '';
+                setTimeout(() => input.classList.remove('shake'), 400);
+            }
+        }
+
+        // 支持 Enter 键提交
+        document.addEventListener('DOMContentLoaded', async () => {
+            const pwdInput = document.getElementById('passwordInput');
+            if (pwdInput) {
+                pwdInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') verifyPassword();
+                });
+            }
+            checkAuth(); // 页面加载时检查验证状态
+            
+            // 调试：在控制台输出正确的密码哈希（生产环境可删除）
+            const correctHash = await sha256('我也不知道密码');
+            console.log('正确的密码哈希:', correctHash);
+        });
+        // ============ 密码验证逻辑结束 ============ 
 
         // 显示加载状态，可选地带有提示文字
         function showLoading(message = '') {
@@ -190,7 +289,7 @@ const HTML_TEMPLATE = `
                 renderHistory();
             }
             
-            document.getElementById('loading').style.display = 'flex';
+            showLoading('正在搜索...');
             const source = document.getElementById('apiSource').value;
             
             try {
@@ -216,33 +315,60 @@ const HTML_TEMPLATE = `
                             </div>
                         </div>
                     \`).join('');
+                } else {
+                    alert('未找到相关影片，请尝试其他关键词');
                 }
-            } catch (error) {} finally { document.getElementById('loading').style.display = 'none'; }
+            } catch (error) {
+                alert('搜索失败，请稍后重试');
+            } finally { hideLoading(); }
         }
 
         async function showDetails(id, name) {
-            document.getElementById('loading').style.display = 'flex';
+            showLoading('正在获取播放资源...');
             const source = document.getElementById('apiSource').value;
+
+            // 如果请求超过 3 秒，更新提示让用户知道可能需要等待
+            const slowHint = setTimeout(() => {
+                updateLoadingText('资源加载中，请耐心等待...');
+            }, 3000);
+
+            // 如果请求超过 8 秒，再次更新提示
+            const verySlowHint = setTimeout(() => {
+                updateLoadingText('正在努力加载，网络较慢请稍候...');
+            }, 8000);
+
             try {
                 const response = await fetch('/api/detail?id=' + id + '&source=' + source);
                 const data = await response.json();
                 
-                lastEpisodesHtml = \`
-                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                        \${data.episodes.map((url, index) => \`
-                            <button onclick="playVideo('\${url}', '\${name}', \${index + 1})" 
-                                    class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium">
-                                第\${index + 1}集
-                            </button>
-                        \`).join('')}
-                    </div>
-                \`;
-                
-                document.getElementById('modalTitle').textContent = name;
-                document.getElementById('modalContent').innerHTML = lastEpisodesHtml;
-                document.getElementById('modal').classList.remove('hidden');
-                document.body.style.overflow = 'hidden';
-            } catch (e) {} finally { document.getElementById('loading').style.display = 'none'; }
+                if (data.episodes && data.episodes.length > 0) {
+                    lastEpisodesHtml = \`
+                        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                            \${data.episodes.map((url, index) => \`
+                                <button onclick="playVideo('\${url}', '\${name}', \${index + 1})" 
+                                        class="ep-btn px-2 py-3 bg-[#111] hover:bg-white hover:text-black border border-[#222] rounded-lg transition-all text-xs font-medium">
+                                    第\${index + 1}集
+                                </button>
+                            \`).join('')}
+                        </div>
+                    \`;
+                    
+                    document.getElementById('modalTitle').textContent = name;
+                    document.getElementById('modalContent').innerHTML = lastEpisodesHtml;
+                    document.getElementById('modal').classList.remove('hidden');
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    // 没有找到播放资源时的提示
+                    alert('未找到播放资源，请尝试其他资源站点');
+                }
+            } catch (e) {
+                // 请求失败时的错误提示
+                alert('获取资源失败，请稍后重试或更换资源站点');
+            } finally {
+                clearTimeout(slowHint);
+                clearTimeout(verySlowHint);
+                hideLoading();
+            }
         }
 
         function playVideo(url, name, ep) {
