@@ -123,6 +123,8 @@ const HTML_TEMPLATE = `
                            placeholder="影片名称...">
                     <button onclick="search()" class="absolute right-2 px-6 md:px-8 py-2.5 md:py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 active:scale-95 transition-all">搜索</button>
                 </div>
+
+                <div id="historyContainer" class="flex flex-wrap gap-2 transition-opacity duration-300"></div>
                 
                 <!-- 使用提示 -->
                 <div class="mb-6 p-4 bg-[#111]/60 border border-[#333]/50 rounded-xl backdrop-blur-md">
@@ -140,8 +142,6 @@ const HTML_TEMPLATE = `
                         </div>
                     </div>
                 </div>
-                
-                <div id="historyContainer" class="flex flex-wrap gap-2 transition-opacity duration-300"></div>
             </div>
         </div>
         
