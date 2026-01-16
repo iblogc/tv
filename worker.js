@@ -101,7 +101,6 @@ const HTML_TEMPLATE = `
 
     <script>
         const JIE_XI_LIST = [
-            { name: '线路1', url: 'https://www.hlsplayer.net/embed?type=m3u8&src='},
             { name: '线路2', url: 'https://lziplayer.com/?url='},
             { name: '线路3', url: 'https://m3u8player.co/player.html?url=' },
             { name: '线路4', url: 'https://playhls.com/?url=' },
