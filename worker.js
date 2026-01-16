@@ -222,19 +222,11 @@ const HTML_TEMPLATE = `
             const errorEl = document.getElementById('authError');
             const hash = await sha256(input.value);
             
-            console.log('🔐 密码验证调试:');
-            console.log('输入的密码:', input.value);
-            console.log('输入密码的哈希:', hash);
-            console.log('期望的哈希:', PASSWORD_HASH);
-            console.log('是否匹配:', hash === PASSWORD_HASH);
-            
             if (hash === PASSWORD_HASH) {
-                console.log('✅ 密码正确，登录成功');
                 localStorage.setItem('movie_hub_authed', 'true');
                 document.getElementById('authScreen').style.display = 'none';
                 errorEl.style.opacity = '0';
             } else {
-                console.log('❌ 密码错误');
                 // 显示错误提示并震动输入框
                 input.classList.add('shake');
                 errorEl.style.opacity = '1';
@@ -261,10 +253,6 @@ const HTML_TEMPLATE = `
             }
             
             checkAuth(); // 页面加载时检查验证状态
-            
-            // 调试：在控制台输出正确的密码哈希（生产环境可删除）
-            const correctHash = await sha256('我也不知道密码');
-            console.log('正确的密码哈希:', correctHash);
         });
         // ============ 密码验证逻辑结束 ============ 
 
